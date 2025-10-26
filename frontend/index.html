@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Energy Consumption Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: #fff;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            background: linear-gradient(45deg, #ffd700, #ff6b6b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 30px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.2);
+        }
+
+        .card h2 {
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+            color: #ffd700;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 400px;
+            width: 100%;
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .control-group {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 20px;
+            backdrop-filter: blur(10px);
+        }
+
+        .control-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #ffd700;
+        }
+
+        .control-group input, .control-group select {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.9);
+            color: #333;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .control-group input:focus, .control-group select:focus {
+            outline: none;
+            background: #fff;
+            transform: scale(1.02);
+        }
+
+        .predict-btn, .analytics-btn {
+            background: linear-gradient(45deg, #ff6b6b, #ffd700);
+            color: #fff;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
+            width: 100%;
+            margin-bottom: 10px;
+        }
+
+        .analytics-btn {
+            background: linear-gradient(45deg, #4ecdc4, #45b7aa);
+            box-shadow: 0 4px 15px rgba(78, 205, 196, 0.3);
+        }
+
+        .predict-btn:hover, .analytics-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(255, 107, 107, 0.4);
+        }
+
+        .analytics-btn:hover {
+            box-shadow: 0 8px 25px rgba(78, 205, 196, 0.4);
+        }
+
+        .predict-btn:active, .analytics-btn:active {
+            transform: translateY(0);
+        }
+
+        .status {
+            text-align: center;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            font-weight: 600;
+        }
+
+        .status.loading {
+            background: rgba(255, 193, 7, 0.2);
+            color: #ffc107;
+            border: 1px solid rgba(255, 193, 7, 0.3);
+        }
+
+        .status.success {
+            background: rgba(40, 167, 69, 0.2);
+            color: #28a745;
+            border: 1px solid rgba(40, 167, 69, 0.3);
+        }
+
+        .status.error {
+            background: rgba(220, 53, 69, 0.2);
+            color: #dc3545;
+            border: 1px solid rgba(220, 53, 69, 0.3);
+        }
+
+        .predictions-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .predictions-table th,
+        .predictions-table td {
+            padding: 12px;
+            text-align: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .predictions-table th {
+            background: rgba(255, 255, 255, 0.1);
+            color: #ffd700;
+            font-weight: bold;
+        }
+
+        .predictions-table tr:nth-child(even) {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .confidence-bar {
+            width: 100%;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .confidence-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #ff6b6b, #ffd700, #4ecdc4);
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 20px;
+            text-align: center;
+            backdrop-filter: blur(10px);
+        }
+
+        .stat-number {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #ffd700;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
+
+        /* New Analytics Section Styles */
+        .analytics-section {
+            margin-top: 30px;
+        }
+
+        .analytics-summary {
+            background: rgba(78, 205, 196, 0.1);
+            border: 1px solid rgba(78, 205, 196, 0.3);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .analytics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .anomaly-item {
+            background: rgba(220, 53, 69, 0.1);
+            border: 1px solid rgba(220, 53, 69, 0.3);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 10px;
+        }
+
+        .anomaly-item.medium {
+            background: rgba(255, 193, 7, 0.1);
+            border-color: rgba(255, 193, 7, 0.3);
+        }
+
+        .anomaly-time {
+            font-weight: bold;
+            color: #ffd700;
+        }
+
+        .recommendation-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .recommendation-list li {
+            background: rgba(40, 167, 69, 0.1);
+            border: 1px solid rgba(40, 167, 69, 0.2);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 8px;
+            position: relative;
+            padding-left: 30px;
+        }
+
+        .recommendation-list li:before {
+            content: "✓";
+            position: absolute;
+            left: 10px;
+            color: #28a745;
+            font-weight: bold;
+        }
+
+        @media (max-width: 768px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .controls {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>⚡ Energy Dashboard</h1>
+            <p>Real-time energy consumption monitoring and intelligent forecasting with advanced analytics</p>
+        </div>
+
+        <div class="controls">
+            <div class="control-group">
+                <label for="currentHour">Current Hour (0-23)</label>
+                <input type="number" id="currentHour" min="0" max="23" value="12">
+            </div>
+            <div class="control-group">
+                <label for="lookahead">Prediction Hours</label>
+                <input type="number" id="lookahead" min="1" max="24" value="6">
+            </div>
+            <div class="control-group">
+                <label for="weekend">Day Type</label>
+                <select id="weekend">
+                    <option value="0">Weekday</option>
+                    <option value="1">Weekend</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <button class="predict-btn" onclick="makePrediction()">
+                    🔮 Predict Energy Usage
+                </button>
+                <button class="analytics-btn" onclick="getAnalytics()">
+                    📊 Get Analytics Report
+                </button>
+                <button class="analytics-btn" onclick="checkAnomalies()">
+                    ⚠️ Check Anomalies
+                </button>
+                <button class="analytics-btn" onclick="downloadPDFReport()">
+                    📄 Download PDF Report
+                </button>
+            </div>
+        </div>
+
+        <div id="status" class="status" style="display: none;"></div>
+
+        <div class="dashboard-grid">
+            <div class="card">
+                <h2>📊 Historical Data (24h)</h2>
+                <div class="chart-container">
+                    <canvas id="historyChart"></canvas>
+                </div>
+            </div>
+            <div class="card">
+                <h2>🔮 Predictions</h2>
+                <div class="chart-container">
+                    <canvas id="predictionChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="stats-grid" id="statsGrid" style="display: none;">
+            <div class="stat-card">
+                <div class="stat-number" id="avgConsumption">-</div>
+                <div class="stat-label">Avg Consumption (kW)</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="peakTime">-</div>
+                <div class="stat-label">Peak Usage Time</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="totalGeneration">-</div>
+                <div class="stat-label">Total Generation (kW)</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="avgConfidence">-</div>
+                <div class="stat-label">Prediction Confidence</div>
+            </div>
+        </div>
+
+        <!-- Analytics Section -->
+        <div class="analytics-section" id="analyticsSection" style="display: none;">
+            <div class="card">
+                <h2>📈 Advanced Analytics Summary</h2>
+                <div id="analyticsSummary" class="analytics-summary"></div>
+                
+                <div class="analytics-grid">
+                    <div>
+                        <h3 style="color: #4ecdc4; margin-bottom: 15px;">💡 Recommendations</h3>
+                        <ul id="recommendationsList" class="recommendation-list"></ul>
+                    </div>
+                    <div>
+                        <h3 style="color: #ff6b6b; margin-bottom: 15px;">⚠️ Detected Anomalies</h3>
+                        <div id="anomaliesList"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card" id="predictionsCard" style="display: none;">
+            <h2>📋 Detailed Predictions</h2>
+            <table class="predictions-table" id="predictionsTable">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Consumption (kW)</th>
+                        <th>Generation (kW)</th>
+                        <th>Net Usage (kW)</th>
+                        <th>Confidence</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        let historyChart, predictionChart;
+        let historyData = [];
+        let predictionData = [];
+
+        // API Base URLs
+        const PYTHON_API_BASE_URL = 'http://localhost:8000';
+        const JAVA_API_BASE_URL = 'http://localhost:8080';
+
+        // Initialize charts
+        function initCharts() {
+            // History Chart
+            const historyCtx = document.getElementById('historyChart').getContext('2d');
+            historyChart = new Chart(historyCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Consumption',
+                        data: [],
+                        borderColor: '#ff6b6b',
+                        backgroundColor: 'rgba(255, 107, 107, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    }, {
+                        label: 'Generation',
+                        data: [],
+                        borderColor: '#4ecdc4',
+                        backgroundColor: 'rgba(78, 205, 196, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: { color: '#fff' }
+                        }
+                    },
+                    scales: {
+                        x: { 
+                            ticks: { color: '#fff' },
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                        },
+                        y: { 
+                            ticks: { color: '#fff' },
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                        }
+                    }
+                }
+            });
+
+            // Prediction Chart
+            const predCtx = document.getElementById('predictionChart').getContext('2d');
+            predictionChart = new Chart(predCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Predicted Consumption',
+                        data: [],
+                        borderColor: '#ffd700',
+                        backgroundColor: 'rgba(255, 215, 0, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 6,
+                        pointHoverRadius: 8
+                    }, {
+                        label: 'Expected Generation',
+                        data: [],
+                        borderColor: '#4ecdc4',
+                        backgroundColor: 'rgba(78, 205, 196, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: { color: '#fff' }
+                        }
+                    },
+                    scales: {
+                        x: { 
+                            ticks: { color: '#fff' },
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                        },
+                        y: { 
+                            ticks: { color: '#fff' },
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Load historical data
+        async function loadHistory() {
+            try {
+                const response = await fetch(`${PYTHON_API_BASE_URL}/api/history`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                historyData = await response.json();
+                
+                const labels = historyData.map(d => d.time);
+                const consumption = historyData.map(d => d.consumption);
+                const generation = historyData.map(d => d.generation);
+
+                historyChart.data.labels = labels;
+                historyChart.data.datasets[0].data = consumption;
+                historyChart.data.datasets[1].data = generation;
+                historyChart.update();
+
+            } catch (error) {
+                console.error('Error loading history:', error);
+                showStatus(`Failed to load history: ${error.message}. Check if Python backend is running on ${PYTHON_API_BASE_URL}`, 'error');
+            }
+        }
+
+        // Make prediction
+        async function makePrediction() {
+            const currentHour = parseInt(document.getElementById('currentHour').value);
+            const lookahead = parseInt(document.getElementById('lookahead').value);
+            const isWeekend = parseInt(document.getElementById('weekend').value);
+
+            if (currentHour < 0 || currentHour > 23 || lookahead < 1 || lookahead > 24) {
+                showStatus('Please enter valid values', 'error');
+                return;
+            }
+
+            showStatus('Making prediction...', 'loading');
+
+            try {
+                const response = await fetch(`${PYTHON_API_BASE_URL}/api/predict`, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        base_hour: currentHour,
+                        lookahead: lookahead,
+                        is_weekend: isWeekend
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                predictionData = await response.json();
+
+                if (predictionData.error) {
+                    showStatus(`Prediction error: ${predictionData.error}`, 'error');
+                    return;
+                }
+
+                updatePredictionChart();
+                updatePredictionsTable();
+                updateStats();
+                showStatus('Prediction completed successfully!', 'success');
+
+            } catch (error) {
+                console.error('Error making prediction:', error);
+                showStatus(`Network error: ${error.message}. Check if Python backend is running on ${PYTHON_API_BASE_URL}`, 'error');
+            }
+        }
+
+        // Get Analytics from Java service
+        async function getAnalytics() {
+            showStatus('Loading analytics...', 'loading');
+            
+            try {
+                const response = await fetch(`${JAVA_API_BASE_URL}/api/analytics/summary`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const analytics = await response.json();
+                displayAnalytics(analytics);
+                showStatus('Analytics loaded successfully!', 'success');
+                
+            } catch (error) {
+                console.error('Error getting analytics:', error);
+                showStatus(`Failed to load analytics: ${error.message}. Check if Java backend is running on ${JAVA_API_BASE_URL}`, 'error');
+            }
+        }
+
+        // Check anomalies
+        async function checkAnomalies() {
+            showStatus('Checking for anomalies...', 'loading');
+            
+            try {
+                const response = await fetch(`${JAVA_API_BASE_URL}/api/analytics/anomalies`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const anomalies = await response.json();
+                displayAnomalies(anomalies);
+                showStatus(`Found ${anomalies.length} anomalies`, 'success');
+                
+            } catch (error) {
+                console.error('Error checking anomalies:', error);
+                showStatus(`Failed to check anomalies: ${error.message}. Check if Java backend is running on ${JAVA_API_BASE_URL}`, 'error');
+            }
+        }
+
+        // Download PDF Report
+        async function downloadPDFReport() {
+            showStatus('Generating PDF report...', 'loading');
+            
+            try {
+                const response = await fetch(`${JAVA_API_BASE_URL}/api/analytics/report/pdf`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = 'energy-analytics-report.pdf';
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                
+                showStatus('PDF report downloaded successfully!', 'success');
+                
+            } catch (error) {
+                console.error('Error downloading PDF:', error);
+                showStatus(`Failed to download PDF: ${error.message}. Check if Java backend is running on ${JAVA_API_BASE_URL}`, 'error');
+            }
+        }
+
+        // Display analytics
+        function displayAnalytics(analytics) {
+            const summaryDiv = document.getElementById('analyticsSummary');
+            summaryDiv.innerHTML = `
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-number">${analytics.totalConsumption.toFixed(2)}</div>
+                        <div class="stat-label">Total Consumption (kW)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">${analytics.totalGeneration.toFixed(2)}</div>
+                        <div class="stat-label">Total Generation (kW)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">${analytics.efficiency.toFixed(1)}%</div>
+                        <div class="stat-label">Energy Efficiency</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">${analytics.trend}</div>
+                        <div class="stat-label">Consumption Trend</div>
+                    </div>
+                </div>
+            `;
+            
+            // Display recommendations
+            const recList = document.getElementById('recommendationsList');
+            recList.innerHTML = '';
+            analytics.recommendations.forEach(rec => {
+                const li = document.createElement('li');
+                li.textContent = rec;
+                recList.appendChild(li);
+            });
+            
+            document.getElementById('analyticsSection').style.display = 'block';
+            document.getElementById('analyticsSection').classList.add('fade-in');
+        }
+
+        // Display anomalies
+        function displayAnomalies(anomalies) {
+            const anomaliesDiv = document.getElementById('anomaliesList');
+            anomaliesDiv.innerHTML = '';
+            
+            if (anomalies.length === 0) {
+                anomaliesDiv.innerHTML = '<p style="color: #4ecdc4;">✅ No anomalies detected - your energy usage looks normal!</p>';
+            } else {
+                anomalies.forEach(anomaly => {
+                    const div = document.createElement('div');
+                    div.className = `anomaly-item ${anomaly.severity.toLowerCase()}`;
+                    div.innerHTML = `
+                        <div class="anomaly-time">${anomaly.time} - ${anomaly.type}</div>
+                        <div>Actual: ${anomaly.value.toFixed(2)} kW | Expected: ${anomaly.expectedValue.toFixed(2)} kW</div>
+                        <div style="margin-top: 8px; font-size: 0.9em;">${anomaly.description}</div>
+                        <div style="margin-top: 5px; font-size: 0.8em; opacity: 0.8;">Severity: ${anomaly.severity}</div>
+                    `;
+                    anomaliesDiv.appendChild(div);
+                });
+            }
+            
+            document.getElementById('analyticsSection').style.display = 'block';
+            document.getElementById('analyticsSection').classList.add('fade-in');
+        }
+
+        // Update prediction chart
+        function updatePredictionChart() {
+            const labels = predictionData.map(d => d.time);
+            const consumption = predictionData.map(d => d.consumption);
+            const generation = predictionData.map(d => d.generation);
+
+            predictionChart.data.labels = labels;
+            predictionChart.data.datasets[0].data = consumption;
+            predictionChart.data.datasets[1].data = generation;
+            predictionChart.update();
+        }
+
+        // Update predictions table
+        function updatePredictionsTable() {
+            const tbody = document.querySelector('#predictionsTable tbody');
+            tbody.innerHTML = '';
+
+            predictionData.forEach(pred => {
+                const row = tbody.insertRow();
+                const netUsage = pred.consumption - pred.generation;
+                
+                row.innerHTML = `
+                    <td><strong>${pred.time}</strong></td>
+                    <td>${pred.consumption.toFixed(2)}</td>
+                    <td>${pred.generation.toFixed(2)}</td>
+                    <td>${netUsage.toFixed(2)}</td>
+                    <td>
+                        <div class="confidence-bar">
+                            <div class="confidence-fill" style="width: ${pred.confidence}%"></div>
+                        </div>
+                        ${pred.confidence}%
+                    </td>
+                `;
+            });
+
+            document.getElementById('predictionsCard').style.display = 'block';
+            document.getElementById('predictionsCard').classList.add('fade-in');
+        }
+
+        // Update statistics
+        function updateStats() {
+            if (predictionData.length === 0) return;
+
+            const avgConsumption = predictionData.reduce((sum, p) => sum + p.consumption, 0) / predictionData.length;
+            const totalGeneration = predictionData.reduce((sum, p) => sum + p.generation, 0);
+            const avgConfidence = predictionData.reduce((sum, p) => sum + p.confidence, 0) / predictionData.length;
+            
+            // Find peak usage time
+            const peakPrediction = predictionData.reduce((max, p) => p.consumption > max.consumption ? p : max);
+
+            document.getElementById('avgConsumption').textContent = avgConsumption.toFixed(1);
+            document.getElementById('peakTime').textContent = peakPrediction.time;
+            document.getElementById('totalGeneration').textContent = totalGeneration.toFixed(1);
+            document.getElementById('avgConfidence').textContent = avgConfidence.toFixed(1) + '%';
+
+            document.getElementById('statsGrid').style.display = 'grid';
+            document.getElementById('statsGrid').classList.add('fade-in');
+        }
+
+        // Show status message
+        function showStatus(message, type) {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = message;
+            statusEl.className = `status ${type}`;
+            statusEl.style.display = 'block';
+
+            if (type === 'loading') {
+                statusEl.innerHTML = `<span class="loading-spinner"></span> ${message}`;
+            }
+
+            if (type !== 'loading') {
+                setTimeout(() => {
+                    statusEl.style.display = 'none';
+                }, 3000);
+            }
+        }
+
+        // Set current hour automatically
+        function setCurrentHour() {
+            const now = new Date();
+            document.getElementById('currentHour').value = now.getHours();
+        }
+
+        // Initialize everything
+        window.onload = function() {
+            initCharts();
+            loadHistory();
+            setCurrentHour();
+        };
+    </script>
+</body>
+</html>

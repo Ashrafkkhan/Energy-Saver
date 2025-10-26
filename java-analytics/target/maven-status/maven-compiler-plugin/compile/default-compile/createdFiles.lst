@@ -1,0 +1,3 @@
+com\energyanalytics\model\Anomaly.class
+com\energyanalytics\controller\AnalyticsController.class
+com\energyanalytics\EnergyAnalyticsApplication.class

@@ -1,0 +1,649 @@
+<!-- Save as: solar-sprint.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Solar Sprint — Save Electricity</title>
+<style>
+  :root{
+    --bg1:#8fd1ff;
+    --bg2:#e9fbff;
+    --panel:#ffffffcc;
+    --accent:#ffcc00;
+    --muted:#64748b;
+  }
+  html,body{height:100%;margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;}
+  body{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:linear-gradient(180deg,var(--bg1),var(--bg2));
+  }
+  #gameWrap{
+    position:relative;
+    width:min(980px,96vw);
+    height:min(640px,90vh);
+    box-shadow:0 12px 30px rgba(10,25,47,0.18);
+    border-radius:14px;
+    overflow:hidden;
+    background:linear-gradient(180deg,#bfe9ff,#eafcff);
+  }
+  canvas{display:block;width:100%;height:100%;}
+  .ui {
+    position:absolute; left:18px; top:14px; display:flex; gap:14px; align-items:center;
+    color:#06243a; font-weight:600; text-shadow:0 1px 0 #ffffff70;
+  }
+  .meter {
+    background:var(--panel);
+    padding:8px 12px; border-radius:10px; font-weight:700; color:#083049;
+    display:flex; gap:8px; align-items:center; box-shadow:0 4px 12px rgba(4,10,20,0.06);
+  }
+  .btns {
+    position:absolute; right:16px; top:14px; display:flex; gap:8px;
+  }
+  button {
+    background:#ffffffcc; border:0; padding:8px 12px; border-radius:10px; cursor:pointer;
+    font-weight:700; color:#07324a;
+    box-shadow:0 4px 10px rgba(4,10,20,0.06);
+  }
+  .overlay {
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    pointer-events:none;
+  }
+  .panel {
+    pointer-events:auto;
+    background:var(--panel); border-radius:12px; padding:18px; width:min(720px,92%);
+    box-shadow:0 8px 30px rgba(5,10,20,0.18); text-align:center;
+  }
+  .hidden{display:none;}
+  h1{margin:0 0 8px 0;font-size:24px;color:#04324e;}
+  p{margin:0 0 12px 0;color:var(--muted);}
+  .tips{font-size:13px;color:#083049;margin-top:8px;text-align:left}
+  .small{font-size:12px;color:#415a6b}
+  footer{position:absolute;left:16px;bottom:12px;color:#0a2e4f;font-size:12px}
+</style>
+</head>
+<body>
+<div id="gameWrap">
+  <canvas id="c"></canvas>
+
+  <div class="ui">
+    <div class="meter" id="energyMeter">☀️ Energy: <span id="energyVal">100</span></div>
+    <div class="meter" id="scoreMeter">🏁 Score: <span id="scoreVal">0</span></div>
+    <div class="meter" id="hiMeter">⭐ High: <span id="hiVal">0</span></div>
+  </div>
+
+  <div class="btns">
+    <button id="pauseBtn">Pause</button>
+    <button id="muteBtn">🔊</button>
+  </div>
+
+  <div class="overlay" id="startOverlay">
+    <div class="panel" role="dialog" aria-modal="true">
+      <h1>Solar Sprint ⚡</h1>
+      <p>You're a solar-run robot running on sunlight. Collect suns to recharge, avoid energy-wasting appliances, and survive as long as you can.</p>
+      <p class="small">Controls: Space / Up arrow / Tap = Jump • Press anywhere to start on mobile.</p>
+      <div style="display:flex;gap:12px;justify-content:center;margin-top:12px;">
+        <button id="startBtn">Start Game</button>
+        <button id="howBtn">How to Play</button>
+      </div>
+      <div class="tips" id="startTips">
+        <strong>Eco Tips:</strong>
+        <ul>
+          <li>Use LED bulbs instead of incandescent ones.</li>
+          <li>Turn off appliances when not in use.</li>
+          <li>Prefer natural light during daytime.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="gameOverOverlay">
+    <div class="panel">
+      <h1 id="goTitle">Game Over</h1>
+      <p id="goText">Your energy ran out.</p>
+      <p class="small">Score: <span id="finalScore">0</span> • High Score: <span id="finalHigh">0</span></p>
+      <div style="display:flex; gap:10px; justify-content:center; margin-top:10px;">
+        <button id="restartBtn">Restart</button>
+        <button id="menuBtn">Main Menu</button>
+      </div>
+    </div>
+  </div>
+
+  <footer>Made to promote energy saving — Solar Sprint</footer>
+</div>
+
+<script>
+/* -------------------------
+   Solar Sprint - Complete Game
+   Single-file HTML + Canvas
+   ------------------------- */
+
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d', { alpha: false });
+let DPR = Math.max(1, window.devicePixelRatio || 1);
+
+function fitCanvas() {
+  const wrap = document.getElementById('gameWrap');
+  const rect = wrap.getBoundingClientRect();
+  canvas.width = Math.round(rect.width * DPR);
+  canvas.height = Math.round(rect.height * DPR);
+  canvas.style.width = rect.width + 'px';
+  canvas.style.height = rect.height + 'px';
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+}
+fitCanvas();
+window.addEventListener('resize', () => { fitCanvas(); });
+
+/* --- Game state --- */
+let game = {
+  running: false,
+  paused: false,
+  score: 0,
+  high: Number(localStorage.getItem('solar_high') || 0),
+  energy: 100,
+  speed: 6,
+  frame: 0,
+  difficultyTimer: 0,
+  invuln: 0, // frames of invulnerability after hit
+  muted: false
+};
+
+/* --- DOM refs --- */
+const startOverlay = document.getElementById('startOverlay');
+const startBtn = document.getElementById('startBtn');
+const howBtn = document.getElementById('howBtn');
+const pauseBtn = document.getElementById('pauseBtn');
+const muteBtn = document.getElementById('muteBtn');
+const gameOverOverlay = document.getElementById('gameOverOverlay');
+const restartBtn = document.getElementById('restartBtn');
+const menuBtn = document.getElementById('menuBtn');
+const energyVal = document.getElementById('energyVal');
+const scoreVal = document.getElementById('scoreVal');
+const hiVal = document.getElementById('hiVal');
+const finalScore = document.getElementById('finalScore');
+const finalHigh = document.getElementById('finalHigh');
+
+hiVal.innerText = game.high;
+
+/* --- Player --- */
+const player = {
+  x: 110,
+  w: 64,
+  h: 64,
+  y: 0,
+  dy: 0,
+  grounded: false,
+  jumpPower: -15,
+  color: '#ffcf36'
+};
+
+/* --- Level objects --- */
+let obstacles = []; // waste devices
+let suns = []; // energy pickups
+let clouds = []; // background parallax clouds
+
+/* --- Utilities --- */
+function rand(min, max){ return Math.random() * (max - min) + min; }
+function clamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
+
+/* --- Sounds using WebAudio (simple) --- */
+let audioCtx, masterGain;
+function ensureAudio() {
+  if (!audioCtx && !game.muted) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain = audioCtx.createGain();
+    masterGain.gain.value = 0.4;
+    masterGain.connect(audioCtx.destination);
+  }
+}
+function beep(freq, time=0.12, type='sine') {
+  if (game.muted) return;
+  ensureAudio();
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = type; o.frequency.value = freq;
+  g.gain.value = 0;
+  o.connect(g); g.connect(masterGain);
+  o.start();
+  g.gain.linearRampToValueAtTime(0.15, audioCtx.currentTime + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + time);
+  o.stop(audioCtx.currentTime + time + 0.02);
+}
+
+/* --- Spawn initial background clouds --- */
+function initClouds() {
+  clouds = [];
+  for (let i=0;i<6;i++){
+    clouds.push({
+      x: rand(0, canvas.width / DPR),
+      y: rand(20, 180),
+      w: rand(80, 220),
+      speed: rand(0.2, 1.0)
+    });
+  }
+}
+
+/* --- Reset / Start / End --- */
+function resetGame() {
+  obstacles = [];
+  suns = [];
+  game.score = 0;
+  game.energy = 100;
+  game.speed = 6;
+  game.frame = 0;
+  game.difficultyTimer = 0;
+  game.invuln = 0;
+  player.y = (canvas.height / DPR) - 50 - player.h;
+  player.dy = 0;
+  player.grounded = true;
+  initClouds();
+  updateHUD();
+}
+
+function startGame() {
+  startOverlay.classList.add('hidden');
+  gameOverOverlay.classList.add('hidden');
+  game.running = true;
+  resetGame();
+  loop();
+}
+
+/* --- UI Buttons --- */
+startBtn.onclick = () => startGame();
+howBtn.onclick = () => {
+  alert('Jump to collect suns and avoid appliances. Space / Up / Tap to jump. Collect suns to recharge energy.');
+};
+pauseBtn.onclick = () => {
+  if (!game.running) return;
+  game.paused = !game.paused;
+  pauseBtn.innerText = game.paused ? 'Resume' : 'Pause';
+  if (!game.paused) loop();
+};
+muteBtn.onclick = () => {
+  game.muted = !game.muted;
+  muteBtn.innerText = game.muted ? '🔇' : '🔊';
+  if (game.muted && audioCtx) { audioCtx.suspend(); }
+  else if (!game.muted && audioCtx) { audioCtx.resume(); }
+};
+restartBtn.onclick = () => startGame();
+menuBtn.onclick = () => {
+  game.running = false;
+  startOverlay.classList.remove('hidden');
+  gameOverOverlay.classList.add('hidden');
+};
+
+/* --- Input --- */
+let touchDown = false;
+function jumpInput() {
+  if (!game.running || game.paused) return;
+  if (player.grounded) {
+    player.dy = player.jumpPower;
+    player.grounded = false;
+    beep(720, 0.08, 'sine');
+  }
+}
+window.addEventListener('keydown', e => {
+  if (e.code === 'Space' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (!game.running) startGame();
+    else jumpInput();
+  }
+  if (e.key === 'r') startGame();
+});
+canvas.addEventListener('pointerdown', e => {
+  if (!game.running) startGame();
+  else jumpInput();
+});
+
+/* --- Spawning obstacles & suns --- */
+function spawnObstacle() {
+  // types: 'tv', 'lamp', 'fridge' - different sizes & damage
+  const types = [
+    {type:'tv', w:64, h:48, dmg:8, color:'#3c5cff'},
+    {type:'lamp', w:40, h:60, dmg:6, color:'#ffce33'},
+    {type:'fridge', w:56, h:84, dmg:12, color:'#9aa4ae'}
+  ];
+  const t = types[Math.floor(rand(0, types.length))];
+  obstacles.push({
+    x: canvas.width / DPR + 30,
+    y: (canvas.height / DPR) - 50 - t.h,
+    w: t.w, h: t.h, type: t.type, dmg: t.dmg, color: t.color
+  });
+}
+
+function spawnSun() {
+  suns.push({
+    x: canvas.width / DPR + 20,
+    y: (canvas.height / DPR) - 120 - rand(40, 240),
+    r: 20 + Math.round(rand(-4,8))
+  });
+}
+
+/* --- Collision helpers --- */
+function rectColl(a,b){
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+function circleRectColl(cx,cy,r,rect){
+  // find closest point
+  const closestX = clamp(cx, rect.x, rect.x + rect.w);
+  const closestY = clamp(cy, rect.y, rect.y + rect.h);
+  const dx = cx - closestX, dy = cy - closestY;
+  return (dx*dx + dy*dy) <= (r*r);
+}
+
+/* --- Difficulty ramp --- */
+function difficultyTick() {
+  game.difficultyTimer++;
+  if (game.difficultyTimer % 600 === 0) {
+    game.speed += 0.5; // gradually increase speed
+  }
+}
+
+/* --- Draw functions --- */
+function drawBackground() {
+  // soft gradient sky already present in CSS; add sun, clouds, distant hills
+  // draw distant hills
+  const h = canvas.height / DPR;
+  ctx.fillStyle = '#bfe8e6';
+  ctx.beginPath();
+  ctx.ellipse(120, h - 80, 260, 60, 0, Math.PI*1.05, Math.PI*2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(420, h - 90, 260, 70, 0, Math.PI*1.05, Math.PI*2);
+  ctx.fill();
+
+  // sun (top-right)
+  ctx.beginPath();
+  ctx.arc(canvas.width / DPR - 80, 80, 36, 0, Math.PI*2);
+  ctx.fillStyle = '#fff66a';
+  ctx.fill();
+  // sun rays (subtle)
+  for (let i=0;i<8;i++){
+    const ang = (i/8) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(canvas.width / DPR - 80 + Math.cos(ang)*44, 80 + Math.sin(ang)*44);
+    ctx.lineTo(canvas.width / DPR - 80 + Math.cos(ang)*62, 80 + Math.sin(ang)*62);
+    ctx.strokeStyle = 'rgba(255,246,122,0.12)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
+  // clouds (parallax)
+  clouds.forEach(cl => {
+    ctx.beginPath();
+    const cx = cl.x;
+    const cy = cl.y;
+    ctx.fillStyle = 'rgba(255,255,255,0.94)';
+    ctx.ellipse(cx, cy, cl.w * 0.6, cl.w * 0.28, 0, 0, Math.PI*2);
+    ctx.ellipse(cx + cl.w*0.3, cy - 8, cl.w*0.45, cl.w*0.24, 0, 0, Math.PI*2);
+    ctx.ellipse(cx - cl.w*0.35, cy - 6, cl.w*0.36, cl.w*0.22, 0, 0, Math.PI*2);
+    ctx.fill();
+  });
+}
+
+function drawGround() {
+  const h = canvas.height / DPR;
+  // ground strip
+  ctx.fillStyle = '#2db24a';
+  ctx.fillRect(0, h - 50, canvas.width / DPR, 50);
+  // road / dirt
+  ctx.fillStyle = '#0b3a21';
+  ctx.fillRect(0, h - 76, canvas.width / DPR, 26);
+  // small details
+  ctx.fillStyle = '#1b8b3a';
+  for (let i=0;i<canvas.width/40;i++){
+    ctx.fillRect(i*40 + ((game.frame*0.3) % 40), h - 60, 12, 6);
+  }
+}
+
+function drawPlayer() {
+  // simple robot with solar panel on top
+  const px = player.x, py = player.y, pw = player.w, ph = player.h;
+  // shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.12)';
+  ctx.beginPath();
+  ctx.ellipse(px + pw/2, py + ph + 6, pw/1.6, 10, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // body
+  ctx.fillStyle = player.color;
+  roundRect(ctx, px, py + 8, pw, ph - 8, 10, true, false);
+  // face
+  ctx.fillStyle = '#333';
+  ctx.fillRect(px + 12, py + 20, 10, 10);
+  ctx.fillRect(px + 38, py + 20, 10, 10);
+  // solar panel (top)
+  ctx.fillStyle = '#0b6aa0';
+  roundRect(ctx, px + 6, py - 8, pw - 12, 20, 6, true, false);
+  // panel grid lines
+  ctx.strokeStyle = '#093b4f';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let i=1;i<=3;i++){
+    const gx = px + 6 + i*( (pw-12)/4 );
+    ctx.moveTo(gx, py - 8); ctx.lineTo(gx, py + 12);
+  }
+  for (let j=1;j<=2;j++){
+    const gy = py - 8 + j*12;
+    ctx.moveTo(px+6, gy); ctx.lineTo(px + pw - 6, gy);
+  }
+  ctx.stroke();
+}
+
+function drawObstacles() {
+  obstacles.forEach(o => {
+    // draw device box
+    ctx.fillStyle = o.color;
+    roundRect(ctx, o.x, o.y, o.w, o.h, 8, true, false);
+    // add small device details per type
+    ctx.fillStyle = '#fff8';
+    if (o.type === 'tv') {
+      ctx.fillRect(o.x + 6, o.y + 8, o.w - 12, o.h - 18);
+      // legs
+      ctx.fillStyle = '#222';
+      ctx.fillRect(o.x + o.w/2 - 10, o.y + o.h - 6, 20, 6);
+    } else if (o.type === 'lamp') {
+      // lamp stand
+      ctx.beginPath();
+      ctx.moveTo(o.x + o.w/2, o.y + o.h);
+      ctx.lineTo(o.x + o.w/2, o.y + o.h - 26);
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = '#222';
+      ctx.stroke();
+      // bulb
+      ctx.beginPath();
+      ctx.arc(o.x + o.w/2, o.y + 8, 14, 0, Math.PI*2);
+      ctx.fillStyle = '#fff792';
+      ctx.fill();
+    } else if (o.type === 'fridge') {
+      // door handle
+      ctx.fillStyle = '#222';
+      ctx.fillRect(o.x + o.w - 12, o.y + 18, 6, 28);
+      // freezer line
+      ctx.fillStyle = 'rgba(0,0,0,0.06)';
+      ctx.fillRect(o.x + 6, o.y + o.h/2 - 2, o.w - 12, 2);
+    }
+  });
+}
+
+function drawSuns() {
+  suns.forEach(s => {
+    // glow
+    const g = ctx.createRadialGradient(s.x, s.y, 2, s.x, s.y, s.r*1.4);
+    g.addColorStop(0, 'rgba(255,255,128,0.95)');
+    g.addColorStop(1, 'rgba(255,255,128,0.05)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.r*1.4, 0, Math.PI*2);
+    ctx.fill();
+    // core
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.r, 0, Math.PI*2);
+    ctx.fillStyle = '#fff76b';
+    ctx.fill();
+    // rays
+    ctx.strokeStyle = 'rgba(255,245,120,0.35)';
+    ctx.lineWidth = 2;
+    for (let i=0;i<8;i++){
+      const ang = i * (Math.PI*2 / 8);
+      ctx.beginPath();
+      ctx.moveTo(s.x + Math.cos(ang)*(s.r+6), s.y + Math.sin(ang)*(s.r+6));
+      ctx.lineTo(s.x + Math.cos(ang)*(s.r+16), s.y + Math.sin(ang)*(s.r+16));
+      ctx.stroke();
+    }
+  });
+}
+
+/* tiny helper to draw rounded rect */
+function roundRect(ctx, x, y, w, h, r, fill, stroke) {
+  if (typeof r === 'number') r = {tl:r, tr:r, br:r, bl:r};
+  ctx.beginPath();
+  ctx.moveTo(x + r.tl, y);
+  ctx.lineTo(x + w - r.tr, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r.tr);
+  ctx.lineTo(x + w, y + h - r.br);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r.br, y + h);
+  ctx.lineTo(x + r.bl, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r.bl);
+  ctx.lineTo(x, y + r.tl);
+  ctx.quadraticCurveTo(x, y, x + r.tl, y);
+  ctx.closePath();
+  if (fill) ctx.fill();
+  if (stroke) ctx.stroke();
+}
+
+/* --- Update HUD --- */
+function updateHUD() {
+  energyVal.innerText = Math.max(0, Math.round(game.energy));
+  scoreVal.innerText = Math.floor(game.score);
+  hiVal.innerText = game.high;
+}
+
+/* --- Main loop --- */
+function loop() {
+  if (!game.running) return;
+  if (game.paused) { requestAnimationFrame(loop); return; }
+
+  // timing
+  game.frame++;
+  game.score += 0.06 + (game.speed - 6) * 0.7;
+  difficultyTick();
+
+  // clear
+  ctx.clearRect(0,0,canvas.width / DPR, canvas.height / DPR);
+  drawBackground();
+
+  // move clouds slow parallax
+  clouds.forEach(cl => {
+    cl.x -= cl.speed * (game.speed/6) * 0.4;
+    if (cl.x < -cl.w*1.5) cl.x = canvas.width / DPR + cl.w;
+  });
+
+  // update player physics
+  player.y += player.dy;
+  player.dy += 0.9; // gravity
+  const groundY = (canvas.height / DPR) - 50 - player.h;
+  if (player.y >= groundY) {
+    player.y = groundY;
+    player.dy = 0;
+    player.grounded = true;
+  } else player.grounded = false;
+
+  // spawn logic (timers influenced by difficulty)
+  if (game.frame % Math.max(50, Math.floor(120 - game.speed*6)) === 0) spawnObstacle();
+  if (game.frame % Math.max(120, Math.floor(200 - game.speed*8)) === 0) spawnSun();
+
+  // move objects
+  obstacles.forEach(o => o.x -= game.speed);
+  suns.forEach(s => s.x -= game.speed);
+
+  // remove off-screen
+  obstacles = obstacles.filter(o => o.x + o.w > -20);
+  suns = suns.filter(s => s.x + s.r > -20);
+
+  // collisions
+  if (game.invuln > 0) game.invuln--;
+  obstacles.forEach((o, i) => {
+    if (rectColl({x:player.x, y:player.y, w:player.w, h:player.h}, o)) {
+      if (game.invuln === 0) {
+        game.energy -= o.dmg;
+        game.invuln = 50; // small cooldown to avoid massive drain per frame
+        beep(220, 0.18, 'sawtooth');
+      }
+    }
+  });
+
+  suns.forEach((s, idx) => {
+    const cx = s.x, cy = s.y, r = s.r;
+    const coll = circleRectColl(cx, cy, r, {x:player.x, y:player.y, w:player.w, h:player.h});
+    if (coll) {
+      game.energy = Math.min(200, game.energy + 18); // collect
+      game.score += 8;
+      beep(980, 0.06, 'triangle');
+      suns.splice(idx, 1);
+    }
+  });
+
+  // passive energy loss & speed increases slightly with score
+  game.energy -= 0.03 + (game.score / 10000);
+  if (game.energy <= 0) {
+    endGame();
+  }
+
+  // draw ground and objects and player
+  drawGround();
+  drawSuns();
+  drawObstacles();
+  drawPlayer();
+
+  // small UI: invulnerability flash
+  if (game.invuln > 0 && (game.invuln % 8 < 4)) {
+    ctx.fillStyle = 'rgba(255,255,255,0.06)';
+    ctx.fillRect(0,0,canvas.width / DPR, canvas.height / DPR);
+  }
+
+  updateHUD();
+
+  // dynamic difficulty: small increases as score grows
+  if (game.frame % 300 === 0) {
+    game.speed += 0.05;
+  }
+
+  requestAnimationFrame(loop);
+}
+
+/* --- End game --- */
+function endGame() {
+  game.running = false;
+  finalScore.innerText = Math.floor(game.score);
+  if (Math.floor(game.score) > game.high) {
+    game.high = Math.floor(game.score);
+    localStorage.setItem('solar_high', game.high);
+  }
+  finalHigh.innerText = game.high;
+  gameOverOverlay.classList.remove('hidden');
+  // small sound
+  beep(120, 0.4, 'sine');
+}
+
+/* --- Init --- */
+(function init(){
+  // set initial player pos
+  player.y = (canvas.height / DPR) - 50 - player.h;
+  initClouds();
+  // Start overlay visible - click start
+  startOverlay.classList.remove('hidden');
+  gameOverOverlay.classList.add('hidden');
+  updateHUD();
+})();
+
+/* Accessibility hints: ensure audio context is resumed on first user gesture for browsers */
+document.addEventListener('click', function initAudioOnGesture(){
+  if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+  document.removeEventListener('click', initAudioOnGesture);
+});
+</script>
+</body>
+</html>
